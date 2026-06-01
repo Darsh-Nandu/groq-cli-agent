@@ -39,7 +39,6 @@ program
           logger.agent("Goodbye!");
           rl.close();
           process.exit(0);
-          return;
         }
 
         try {
