@@ -2,8 +2,6 @@
 
 A terminal-based AI agent built with TypeScript and Groq API that understands natural language and autonomously manages your filesystem using LLM-powered tool calling.
 
-Built as part of a GSoC application for the Gemini CLI project.
-
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue?logo=typescript)
 ![Groq](https://img.shields.io/badge/Groq-llama--3.3--70b-orange?logo=groq)
 ![Node](https://img.shields.io/badge/Node.js-18+-green?logo=node.js)
@@ -162,4 +160,3 @@ This is the same pattern used by Gemini CLI, Claude Code, and other modern AI ag
 
 **Darsh Nandu**
 B.Tech, Data Science & AI — IIT Bhilai
-GSoC Applicant — Gemini CLI Project
