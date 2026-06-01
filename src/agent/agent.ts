@@ -1,6 +1,7 @@
 import { groqClient, MODEL} from "../config/groq";
 import { logger } from "../utils/logger";
 import { runTool } from "./toolRunner";
+import { saveMessage, getHistory } from "../db/memory";
 
 // Tool defination
 const tools = [
@@ -78,56 +79,91 @@ const tools = [
   },
 ];
 
-export async function runAgent(userInput: string): Promise<void> {
+export async function runAgent(userInput: string, sessionId: string): Promise<void> {
     logger.agent(`Processing: ${userInput}`);
 
+    // Save user message to DB
+    await saveMessage(sessionId, "user", userInput);
+
+    // Load conversation from history from DB
+    const history = await getHistory(sessionId, 10);
+    
     const messages: any[] = [
         {
             role: "system",
             content: `You are a helpful CLI agent that manages the filesystem.
-            When the user asks you to do somethingm, use the appropriate tool if any tool is needed to dp that task.
-            After using a tool, summarize what you did in one clear sentance.`,
+
+            IMPORTANT RULES:
+            1. Only use a tool when the user EXPLICITLY asks to create, read, edit, delete, or scan files/directories.
+            2. If the user is just chatting, greeting, or asking questions — respond conversationally WITHOUT using any tool.
+            3. Do NOT create files to store conversation information unless the user specifically asks you to save something.
+            4. Only call multiple tools if the user's request clearly requires multiple filesystem operations.
+            5. When in doubt — just talk, do NOT use a tool.
+
+            Examples of when to USE tools:
+            - "create a file called hello.ts"
+            - "read the file config.json"
+            - "scan the current directory"
+            - "delete temp.txt"
+
+            Examples of when NOT to use tools:
+            - "hi my name is Darsh" → just say hello back
+            - "what is my name?" → answer from conversation history
+            - "what can you do?" → explain your capabilities
+            - "thanks!" → respond naturally`,
         },
-        {
-            role: "user",
-            content: userInput,
-        }
+        // Inject conversation history so agent remembers past messages
+        ...history.map((msg) => ({
+          role: msg.role,
+          content: msg.content
+        })),
     ];
 
-    const response = await groqClient.chat.completions.create({
+    // Multi - tool loop
+    let continueLoop = true;
+    let finalResponse = "";
+
+    while (continueLoop) {
+      const response = await groqClient.chat.completions.create({
         model: MODEL,
         messages,
         tools,
         tool_choice: "auto"
-    });
+      });
 
-    const message = response.choices[0].message;
+      const message = response.choices[0].message;
+      messages.push(message);
 
-    // Check if ai want to use a tool
-    if(message.tool_calls && message.tool_calls.length > 0) {
-        const toolCall = message.tool_calls[0];
-        const toolName = toolCall.function.name;
-        const toolArgs = JSON.parse(toolCall.function.arguments);
+      if (message.tool_calls && message.tool_calls.length > 0) {
+        for (const toolCall of message.tool_calls) {
+          const toolName = toolCall.function.name;
+          const toolArgs = JSON.parse(toolCall.function.arguments);
+          
+          const toolResult = runTool(toolName, toolArgs);
 
-        // Run the tool
-        const toolResult = runTool(toolName, toolArgs);
+          // Save tool call to DB
+          await saveMessage(
+              sessionId,
+              "tool",
+              `Tool: ${toolName} | Args ${JSON.stringify(toolArgs)}`,
+              toolName,
+              toolResult,
+          );
 
-        // Send tool results back to Groq for final response
-        messages.push(message);
-        messages.push({
+          // Add tool result to the conversation for the next loop
+          messages.push({
             role: "tool",
             tool_call_id: toolCall.id,
-            content: toolResult
-        });
-        
-        const finalResponse = await groqClient.chat.completions.create({
-            model: MODEL,
-            messages,
-            tools,
-        });
-
-        logger.agent(finalResponse.choices[0].message.content ?? "Done!");
-    } else {
-        logger.agent(message.content ?? "No response.");
+            content: toolResult,
+          });
+        } 
+      } else {
+        finalResponse = message.content ?? "Done!";
+        continueLoop = false; 
+      }
     }
+
+    // Save final assistant response to DB
+    await saveMessage(sessionId, "assistant", finalResponse);
+    logger.agent(finalResponse);
 }

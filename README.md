@@ -162,4 +162,3 @@ This is the same pattern used by Gemini CLI, Claude Code, and other modern AI ag
 
 **Darsh Nandu**
 B.Tech, Data Science & AI — IIT Bhilai
-GSoC Applicant — Gemini CLI Project
