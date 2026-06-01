@@ -77,3 +77,8 @@ export async function getAllSessions(): Promise<SessionSummary[]> {
     );
     return result.rows;
 }
+
+// Delete a session and all its messages
+export async function deleteSession(sessionId: string): Promise<void> {
+    await pool.query(`DELETE FROM messages WHERE session_id = $1`, [sessionId]);
+}

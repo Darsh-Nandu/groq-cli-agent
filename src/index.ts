@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { runAgent } from "./agent/agent";
 import { logger } from "./utils/logger";
 import { connectDB, initDB } from "./db/database";
-import { clearHistory, getAllSessions } from "./db/memory";
+import { clearHistory, getAllSessions, deleteSession } from "./db/memory";
 
 const program = new Command();
 
@@ -201,6 +201,34 @@ program
     };
 
     askQuestion();
+  });
+
+// Delete session command
+program
+  .command("delete <sessionId>")
+  .description("Delete a past session and all its messages")
+  .action(async (sessionId: string) => {
+    try {
+      await connectDB();
+      await initDB();
+
+      // Verify session exists first
+      const sessions = await getAllSessions();
+      const exists = sessions.find((s) => s.session_id === sessionId);
+
+      if (!exists) {
+        logger.error(`Session "${sessionId}" not found.`);
+        logger.info(`Run "npm run dev sessions" to see all available sessions.`);
+        process.exit(1);
+      }
+
+      await deleteSession(sessionId);
+      logger.success(`Session deleted: ${sessionId}`);
+      process.exit(0);
+    } catch (err: any) {
+        logger.error(`Error deleting session: ${err.message}`);
+        process.exit(1);
+    }
   });
 
 program.parse(process.argv);
