@@ -7,6 +7,13 @@ export interface Message {
   tool_result?: string;
 }
 
+export interface SessionSummary {
+    session_id: string;
+    message_count: number;
+    started_at: Date;
+    last_message: string;
+}
+
 // Save a message to the database
 export async function saveMessage(
   sessionId: string,
@@ -41,18 +48,32 @@ export async function getHistory(
   return result.rows.reverse();
 }
 
-// Get all sessions
-export async function getAllSessions(): Promise<string[]> {
-  const result = await pool.query(
-    `SELECT DISTINCT session_id, MIN(created_at) as started_at
-     FROM messages
-     GROUP BY session_id
-     ORDER BY started_at DESC`
-  );
-  return result.rows.map((r) => r.session_id);
-}
-
 // Clear history for a session
 export async function clearHistory(sessionId: string): Promise<void> {
   await pool.query(`DELETE FROM messages WHERE session_id = $1`, [sessionId]);
+}
+
+// Get all past sessions with preview of last message
+export async function getAllSessions(): Promise<SessionSummary[]> {
+
+    const result = await pool.query(
+        `SELECT
+            session_id,
+            COUNT(*) as message_count,
+            MIN(created_at) as started_at,
+            (
+                SELECT content
+                FROM messages m2
+                WHERE m2.session_id = m1.session_id
+                AND m2.role IN ('user', 'assistant')
+                ORDER BY created_at DESC
+                LIMIT 1
+
+            ) as last_message
+            FROM messages m1
+            WHERE role IN ('user', 'assistant')
+            GROUP BY session_id
+            ORDER BY MIN(created_at) DESC`
+    );
+    return result.rows;
 }
